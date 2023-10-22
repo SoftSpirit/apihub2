@@ -1,0 +1,68 @@
+version: '3.3'
+ 
+services:
+  pg12:
+    image: postgres:12.3
+    container_name: apihub2-postgres12
+    restart: always
+    privileged: true
+    environment:
+      POSTGRES_PASSWORD: 123456    
+      POSTGRES_DB: apihub2
+    volumes:
+      - "./data/pg:/var/lib/postgresql/data"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.8.16-management-alpine
+    container_name: apihub2-rabbitmq
+    privileged: true
+    environment:
+      RABBITMQ_DEFAULT_USER: apihub   
+      RABBITMQ_DEFAULT_PASS: 822a767b5aca83fbb520f522dffea10b
+      RABBITMQ_DEFAULT_VHOST: apihubVhost
+
+  redis:
+    image: redis:6.2.3-alpine
+    container_name: apihub2-redis
+    privileged: true
+    command: ["redis-server", "--requirepass", "Vs5588"]
+    volumes:
+      - "./data/redis:/data"
+
+  apihub: &apihub_base
+    depends_on:
+     - pg12
+     - rabbitmq
+     - redis
+    image: registry.cn-beijing.aliyuncs.com/simage/apihub:${APIHUB_VERSION}
+    container_name: apihub2
+    working_dir: /app
+    privileged: true
+    ports:
+      - ${APIHUB_PORT}:8888
+    restart: always
+    volumes:
+      - "./logs:/app/logs"
+      - "./env.py:/app/env.py"
+      - "./data/media:/app/media"
+
+    command: ./sh/run
+
+  celery_worker:
+    <<: *apihub_base
+    ports:
+      - 18888:8888
+    container_name: apihub2-celery-worker
+    command: ./sh/celery.sh
+
+  celery_beat:
+    <<: *apihub_base
+    ports:
+      - 28888:8888
+    container_name: apihub2-celery-beat
+    command: ./sh/celery-beat.sh
